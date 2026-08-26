@@ -41,7 +41,7 @@ namespace omni
     {
     public:
       Tuning(omni::proj::Tuning&);
-      ~Tuning();
+	  ~Tuning();
 
       omni::proj::Tuning const& tuning() const;
 

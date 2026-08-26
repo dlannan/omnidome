@@ -37,6 +37,7 @@
 #include "TuningGLView.h"
 #include <omni/ui/ExceptionList.h>
 #include <omni/serialization/PropertyMap.h>
+#include <omni/Session.h>
 
 #include "proj/Tuning.h"
 #include "proj/TuningList.h"
@@ -49,6 +50,7 @@
 #include "ToolBar.h"
 
 using namespace omni::ui;
+using namespace omni;
 
 MainWindow::MainWindow(QMainWindow *parent) :
   QMainWindow(parent),

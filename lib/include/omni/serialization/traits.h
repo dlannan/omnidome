@@ -126,14 +126,19 @@ namespace omni {
         return traits::Read<T>(_args ...)(_stream, _t);
     }
 
-    /// Deserialize object of type T and return its value
-    template<typename T, typename STREAM>
-    T deserializeReturn(STREAM& _stream, T const _default = T()) {
-      T _t = _default;
+	template<typename T, typename STREAM>
+	T deserializeReturn(STREAM& _stream) {
+		T _t;
+		deserialize(_stream, _t);
+		return _t;
+	}
 
-      deserialize(_stream, _t);
-      return _t;
-    }
+	template<typename T, typename STREAM>
+	T deserializeReturn(STREAM& _stream, T const& _default) {
+		T _t = _default;
+		deserialize(_stream, _t);
+		return _t;
+	}
 
     /// Serialize object to stream
     template<typename STREAM, typename T>

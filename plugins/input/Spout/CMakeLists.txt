@@ -40,8 +40,15 @@ set(SOURCES
 omni_plugin(plugin_input_Spout "${SOURCES}")
 
 target_include_directories(plugin_input_Spout
+    PRIVATE
+    "C:/Program Files (x86)/Microsoft DirectX SDK (June 2010)/Include"
     PUBLIC
     ${Spout_PATH})
+
+target_link_directories(plugin_input_Spout
+    PRIVATE
+    "C:/Program Files (x86)/Microsoft DirectX SDK (June 2010)/Lib/x64"
+)
 
 target_link_libraries(plugin_input_Spout
     PUBLIC

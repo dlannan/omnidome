@@ -37,10 +37,10 @@ namespace omni
 
     Tuning* TuningList::add(bool _makeCurrent)
     {
-      container_type::emplace_back(new Tuning(session_));
-      auto* _tuning = container_type::back().get();
+      tunings_.emplace_back(new Tuning(session_));
+      auto* _tuning = tunings_.back().get();
       if (_makeCurrent)
-        setCurrentIndex(container_type::size()-1);
+        setCurrentIndex(tunings_.size()-1);
 
       // Assign virtual screen initially, this also sets up projector aspectRatio correctly
       _tuning->assignVirtualScreen();
@@ -56,11 +56,11 @@ namespace omni
 
     Tuning* TuningList::current()
     {
-      return validIndex(currentIdx_) ? container_type::at(currentIdx_).get() : nullptr;
+      return validIndex(currentIdx_) ? tunings_.at(currentIdx_).get() : nullptr;
     }
     Tuning const* TuningList::current() const
     {
-      return validIndex(currentIdx_) ? container_type::at(currentIdx_).get() : nullptr;
+      return validIndex(currentIdx_) ? tunings_.at(currentIdx_).get() : nullptr;
     }
 
     void TuningList::setCurrentIndex(int _currentIdx)
@@ -86,25 +86,25 @@ namespace omni
     void TuningList::remove(int _idx)
     {
       if (!validIndex(_idx)) return;
-      container_type::erase(container_type::begin() + _idx);
+      tunings_.erase(tunings_.begin() + _idx);
     }
 
     void TuningList::clear()
     {
-      container_type::clear();
+      tunings_.clear();
       currentIdx_ = -1;
     }
 
     Tuning* TuningList::operator[](int _index)
     {
       return validIndex(_index) ?
-        container_type::at(_index).get() : nullptr;
+        tunings_.at(_index).get() : nullptr;
     }
 
     Tuning const* TuningList::operator[](int _index) const
     {
       return validIndex(_index) ?
-        container_type::at(_index).get() : nullptr;
+        tunings_.at(_index).get() : nullptr;
     }
 
 
@@ -128,7 +128,7 @@ namespace omni
     void TuningList::toStream(QDataStream& _stream) const
     {
       PropertyMap _map;
-      _map("size",uint32_t(container_type::size()));
+      _map("size",uint32_t(tunings_.size()));
       _map("currentIndex",currentIdx_);
       _stream << _map;
 
@@ -157,7 +157,7 @@ namespace omni
 
     bool TuningList::validIndex(int _idx) const
     {
-      return (_idx >= 0) && (_idx < container_type::size());
+      return (_idx >= 0) && (_idx < tunings_.size());
     }
   }
 }

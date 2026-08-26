@@ -35,19 +35,29 @@ namespace omni {
      Input List is the root input of a session's input tree.
      Input List is serializable via QDataStream.
      **/
-    class OMNI_EXPORT List :
-      public PropertyMapSerializer,
-      private std::vector< std::unique_ptr< Input > >
-    {
-      public:  
-        using container_type = std::vector< std::unique_ptr< Input >> ; 
-        List() {}
+
+	  class OMNI_EXPORT List :
+		  public PropertyMapSerializer
+	  {
+	  public:
+		  using container_type = std::vector<std::unique_ptr<Input>>;
+		  List() {}
         ~List() {}
 
-        using container_type::size;
-        using container_type::empty;
-        using container_type::begin;
-        using container_type::end;
+		List(const List&) = delete;
+		List& operator=(const List&) = delete;
+
+		List(List&&) = default;
+		List& operator=(List&&) = default;
+
+		size_t size() const { return inputs_.size(); }
+		bool empty() const { return inputs_.empty(); }
+
+		auto begin() { return inputs_.begin(); }
+		auto end() { return inputs_.end(); }
+
+		auto begin() const { return inputs_.begin(); }
+		auto end() const { return inputs_.end(); }
 
         /**@brief Add new input with given type id. Returns nullptr if input
            with typeid does not exist
@@ -90,6 +100,9 @@ namespace omni {
         /// Test for equality
         friend bool   operator==(List const&,
                                  List const&);
+
+	  private:
+		  container_type inputs_;
 
       private:
         bool validIndex(int) const; 

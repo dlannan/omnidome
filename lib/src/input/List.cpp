@@ -53,7 +53,7 @@ namespace omni {
 
     void List::toPropertyMap(PropertyMap& _map) const {
       _map("currentIndex",currentIndex_); 
-      _map("inputs",static_cast<container_type const&>(*this));
+      _map("inputs",inputs_);
     }
 
     Input* List::current() const
@@ -67,19 +67,19 @@ namespace omni {
 
       if (!_input) return nullptr;
 
-      container_type::emplace_back(std::move(_input));
-      return container_type::back().get();
+      inputs_.emplace_back(std::move(_input));
+      return inputs_.back().get();
     }
 
     Input* List::addInput(Input*_input) {
-      container_type::emplace_back(_input);
-      return container_type::back().get();
+      inputs_.emplace_back(_input);
+      return inputs_.back().get();
     }
 
     void List::removeInput(int index) {
       if (!validIndex(index)) return;
 
-      container_type::erase(container_type::begin() + index);
+      inputs_.erase(inputs_.begin() + index);
       if (!validIndex(index)) {
         setCurrentIndex(-1);
       }
@@ -87,7 +87,7 @@ namespace omni {
 
     Input* List::getInput(int index) const {
       if (!validIndex(index)) return nullptr;
-      return container_type::at(index).get();
+      return inputs_.at(index).get();
     }
 
     int List::currentIndex() const

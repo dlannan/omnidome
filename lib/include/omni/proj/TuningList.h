@@ -32,16 +32,23 @@ namespace omni {
     /**@brief Tuning List contains a list of tunings
      *@detail Tuning List is serializable via QDataStream
      **/
-    class OMNI_EXPORT TuningList : private std::vector<std::unique_ptr<Tuning> >{
+    class OMNI_EXPORT TuningList {
       public:
         TuningList(Session const&);
 
-        typedef std::vector<std::unique_ptr<Tuning> >container_type;
+		TuningList(TuningList const&) = delete;
+		TuningList& operator=(TuningList const&) = delete;
 
-        using container_type::size;
-        using container_type::empty;
-        using container_type::begin;
-        using container_type::end;
+		using container_type = std::vector<std::unique_ptr<Tuning>>;
+
+		size_t size() const { return tunings_.size(); }
+		bool empty() const { return tunings_.empty(); }
+
+		container_type::iterator begin() { return tunings_.begin(); }
+		container_type::iterator end() { return tunings_.end(); }
+
+		container_type::const_iterator begin() const { return tunings_.begin(); }
+		container_type::const_iterator end() const { return tunings_.end(); }
 
         /**@brief Add tuning to list
          * @detail Returns pointer new tuning
@@ -92,12 +99,12 @@ namespace omni {
                                   TuningList const&);
 
       private:
-        /// Test of index is between 0 and size()-1
-        bool validIndex(int) const;
+		  container_type tunings_;
 
-        int currentIdx_ = -1;
+		  bool validIndex(int) const;
 
-        Session const& session_;
+		  int currentIdx_ = -1;
+		  Session const& session_;
     };
   }
 }

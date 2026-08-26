@@ -82,10 +82,8 @@ namespace omni {
   }
 }
 
-QDataStream& OMNI_EXPORT operator>>(QDataStream&,
-                        omni::media::Location&);
-QDataStream& OMNI_EXPORT operator<<(QDataStream&,
-                        omni::media::Location const&);
+OMNI_EXPORT QDataStream& operator>>(QDataStream&,omni::media::Location&);
+OMNI_EXPORT QDataStream& operator<<(QDataStream&,omni::media::Location const&);
 
 
 #endif /* OMNI_MEDIA_INTERFACE_H_ */

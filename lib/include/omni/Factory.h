@@ -150,17 +150,17 @@ namespace omni
     class_map_type _classes;
   };
 }
-
-namespace std {
-  /// Template specialization for Id to make it hashable
-  template<>
-  struct hash<omni::Id>
-  {
-    /// Use hash<std::string> to produce hash value
-    inline size_t operator()(const omni::Id& _id) const
-    {
-      return hash<std::string>()(_id.toStdString());
-    }
-  };
-}
-
+//
+//namespace std {
+//  /// Template specialization for Id to make it hashable
+//  template<>
+//  struct hash<omni::Id>
+//  {
+//    /// Use hash<std::string> to produce hash value
+//    inline size_t operator()(const omni::Id& _id) const
+//    {
+//      return hash<std::string>()(_id.toStdString());
+//    }
+//  };
+//}
+//

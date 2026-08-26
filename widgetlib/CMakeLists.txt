@@ -1,6 +1,7 @@
 
-file(GLOB HEADERS_PUB_ROOT "include/omni/*.h")
-file(GLOB HEADERS_PUB_SUB "include/omni/**/*.h")
+file(GLOB HEADERS_PUB_ROOT CONFIGURE_DEPENDS "include/omni/*.h")
+
+file(GLOB HEADERS_PUB_SUB CONFIGURE_DEPENDS "include/omni/**/*.h")
 
 find_package(Qt5 COMPONENTS Widgets REQUIRED)
 
@@ -38,15 +39,14 @@ target_link_libraries(omniwidget
 )
 
 target_compile_definitions(omniwidget
-    PUBLIC
+    PRIVATE
         OMNIWIDGET_LIBRARY)
 
-if(WIN32)
-  SET(OUTPUT_PATH ../app)
+SET(OUTPUT_PATH ../app)
 
-  SET_TARGET_PROPERTIES(omniwidget
-      PROPERTIES
-      RUNTIME_OUTPUT_DIRECTORY ${OUTPUT_PATH}
-      LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_PATH}
-  )
-endif()
+SET_TARGET_PROPERTIES(omniwidget
+    PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${OUTPUT_PATH}
+    LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_PATH}
+    ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_PATH}
+)

@@ -41,7 +41,7 @@ namespace omni {
       tuning_(_tuning)
     {}
 
-    Tuning::~Tuning() {}
+	Tuning::~Tuning() = default;
 
     omni::proj::Tuning const& Tuning::tuning() const
     {

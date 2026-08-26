@@ -59,8 +59,7 @@ namespace omni {
         setup();
       }
 
-      Tuning::~Tuning()
-      {}
+	  Tuning::~Tuning() = default;
 
       void Tuning::dataToFrontend() {
         glView_->setDataModel(dataModel());
