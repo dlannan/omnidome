@@ -56,8 +56,8 @@ namespace omni {
         {
             if (!dataModel()->canvas())
             {
-                dataModel()->setCanvas("HalfDome");
-                selectCanvasType("HalfDome");
+                dataModel()->setCanvas("Cylinder");
+                selectCanvasType("Cylinder");
             }
             // Search combobox for available canvas types
             int _index = 0;
