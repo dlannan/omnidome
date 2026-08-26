@@ -40,13 +40,17 @@ namespace omni {
             {
                 auto& _id = _idCanvasClass.first;
                 ui_->boxCanvasSelect->addItem(QIcon(QString(":/canvas/") + _id +
-                                                    QString(
-                                                        ".png")), _id,
-                                              QVariant(_id));
+                                                    QString(".png")), _id,
+                                                    QVariant(_id));
             }
 
-            connect(ui_->boxCanvasSelect, SIGNAL(currentIndexChanged(QString)), this,
-                    SLOT(selectCanvasType(QString)));
+//            connect(ui_->boxCanvasSelect, SIGNAL(currentIndexChanged(QString)), this,
+//                    SLOT(selectCanvasType(QString)));
+            connect(ui_->boxCanvasSelect,
+                QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this,
+                [this](int index) { selectCanvasType( ui_->boxCanvasSelect->itemData(index).toByteArray() );
+                });
         }
 
         Canvas::~Canvas()
