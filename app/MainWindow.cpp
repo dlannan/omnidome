@@ -503,6 +503,12 @@ void MainWindow::addProjector(QAction *_action)
   }
 }
 
+void MainWindow::startLiveMode()
+{
+    session_->setMode(Session::Mode::LIVE);
+    setMode();
+}
+
 void MainWindow::setMode()
 {
   auto _mode       = session_->mode();

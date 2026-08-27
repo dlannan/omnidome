@@ -29,36 +29,38 @@
 using namespace omni;
 
 class CommandLineParser {
-  public:
-    void parse(QApplication const& _app) {
-      QString _argument;
+public:
+    void parse(QApplication const& app) {
+        const auto args = app.arguments();
 
-      for (auto& _arg : _app.arguments()) {
-        if (_arg[0] == '+') {
-          _argument = "";
+        for (int i = 1; i < args.size(); ++i) {
+            const QString& arg = args[i];
 
-          for (int i = 1; i < _arg.size(); ++i) {
-            _argument += _arg[i];
-          }
-        } else {
-          keyValues_[_argument] += _arg + " ";
+            if (arg.startsWith("--")) {
+                const QString key = arg.mid(2);
+
+                // Option with a following value
+                if (i + 1 < args.size() && !args[i + 1].startsWith("--")) {
+                    keyValues_[key] = args[++i];
+                }
+                else {
+                    // Boolean flag
+                    keyValues_[key] = "true";
+                }
+            }
         }
-      }
-
-      for (auto& _keyValue : keyValues_) {
-        _keyValue.second = _keyValue.second.trimmed();
-      }
     }
 
-    QString value(QString const& _key) const {
-      if (!keyValues_.count(_key)) {
-        return QString();
-      }
-
-      return keyValues_.at(_key);
+    QString value(QString const& key) const {
+        auto it = keyValues_.find(key);
+        return it != keyValues_.end() ? it->second : QString();
     }
 
-  private:
+    bool has(QString const& key) const {
+        return keyValues_.count(key) != 0;
+    }
+
+private:
     std::map<QString, QString> keyValues_;
 };
 
@@ -80,31 +82,39 @@ int main(int ac, char *av[])
 
   omni::ui::Application _a(ac, av);
 
-  /// Command line parser is only available in debug mode
-#ifdef QT_DEBUG
   CommandLineParser parser;
   parser.parse(_a);
 
-  if (!parser.value("stylesheet").isEmpty()) {
-    qDebug() << parser.value("stylesheet");
-    _a.setStyleSheetFile(parser.value("stylesheet"));
-  }
+  /// Command line parser is only available in debug mode
+#ifdef QT_DEBUG
+//  if (!parser.value("stylesheet").isEmpty()) {
+//    qDebug() << parser.value("stylesheet");
+//    _a.setStyleSheetFile(parser.value("stylesheet"));
+//  }
 #endif // ifdef DEBUG
+
+  QString profile = parser.value("profile");
+  bool live = parser.value("live").isEmpty()? false: true;
+  bool hidden = parser.value("hide").isEmpty() ? false : true;
 
   ui::MainWindow _w;
   _w.move(QApplication::primaryScreen()->geometry().topLeft());
 
+  // Load mapping session from given commandline argument when in release mode
+  if (!profile.isEmpty())
+      _w.openProjection(profile);
+
+  if (live)
+      _w.startLiveMode();
+
+  if (hidden)
+      _w.hide();
+  else
+      _w.show();
+
 #if !defined (Q_OS_WIN)
   Q_INIT_RESOURCE(libomni);
 #endif
-  // Load mapping session from given commandline argument when in release mode
-#ifndef QT_DEBUG
-
-  if (ac == 2)
-  {
-    _w.openProjection(av[1]);
-  }
-#endif // ifndef DEBUG
 
   return _a.exec();
 }

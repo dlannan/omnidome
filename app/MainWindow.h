@@ -75,6 +75,9 @@ namespace omni {
         /// Sets modified flag to true
         void modified();
 
+        /// Start live mode based on incoming flags
+        void startLiveMode();
+
       protected:
         void closeEvent(QCloseEvent *_event);
         void showEvent(QShowEvent *_event);
