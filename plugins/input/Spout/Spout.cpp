@@ -59,7 +59,6 @@ namespace omni {
     void      Spout::deactivate() {
         if (!framebuffer())
             spoutReceiver_.ReleaseReceiver();
-
         this->killTimer(timerId_);
         timerId_ = 0;
     }
@@ -72,9 +71,10 @@ namespace omni {
 
       if (!framebuffer()) {
           if (spoutReceiver_.CreateReceiver(senderName_, w, h, true)) {
-              if (int(w) != size().width() || int(h) != size().height()) {
+              if (int(w) != size().width() || int(h) != size().height() || recieverGone_) {
                   setupFramebuffer(QSize(int(w),int(h)));
                   initTexture();
+				  recieverGone_ = false;
               }
           }
       }
@@ -92,6 +92,7 @@ namespace omni {
           } else {
               spoutReceiver_.ReleaseReceiver();
               destroy();
+			  recieverGone_ = true;
           }
       }
     }

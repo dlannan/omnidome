@@ -58,6 +58,7 @@ namespace omni {
         SpoutReceiver spoutReceiver_;
         GLuint textureId_ = 0;
         int timerId_ = 0;
+		bool recieverGone_ = true;
         char senderName_[256];
     };
   }
