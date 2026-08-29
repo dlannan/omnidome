@@ -7,6 +7,8 @@
 
 #include <omni/visual/ContextBoundPtr.h>
 #include <omni/input/Framebuffer.h>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLFramebufferObject>
 
 #include "ScreenCaptureBackend.h"
 
@@ -14,17 +16,19 @@ namespace omni
 {
 	namespace input
 	{
-		class ScreenCapture : public QObject, public Framebuffer
-		{
+		class ScreenCapture : public QObject, public Framebuffer {
 			Q_OBJECT
-				Q_PLUGIN_METADATA(IID OMNI_INPUT_INTERFACE_IID)
-				Q_INTERFACES(omni::input::Interface)
-				OMNI_PLUGIN_INFO("Screen capture", "Copyright (C) 2026")
+			Q_PLUGIN_METADATA(IID OMNI_INPUT_INTERFACE_IID)
+			Q_INTERFACES(omni::input::Interface)
+			OMNI_PLUGIN_INFO("Screen capture", "Copyright (C) 2026")
 
 		public:
 			OMNI_REGISTER_CLASS(Factory, ScreenCapture)
 
-				enum class CaptureMode {
+			ScreenCapture();
+			~ScreenCapture();
+
+			enum class CaptureMode {
 				Monitor,
 				Window,
 				Region
@@ -35,9 +39,6 @@ namespace omni
 				int w, h;
 			};
 
-			ScreenCapture();
-			~ScreenCapture() final = default;
-
 			GLuint textureId() const;
 
 			void update() override;
@@ -47,13 +48,30 @@ namespace omni
 			void setMode(CaptureMode);
 			CaptureMode mode() const;
 
-			void setFlipFrame(bool);
-			bool flipFrame() const;
+			void setWindowName(QString name);
+			QString getWindowName() const;
+
+			void setRegionSize(QSize sz);
+			QSize getRegionSize();
+
+			void setRegionPos(QSize pos);
+			QSize getRegionPos();
+
+			void findWindow();
+			void regionChanged();
+
+			/// Serialize image path to property map
+			void     toPropertyMap(PropertyMap&) const;
+
+			/// Deserialize from property map and load image
+			void     fromPropertyMap(PropertyMap const&);
 
 		private:
 			void activate() override;
 			void deactivate() override;
 			void timerEvent(QTimerEvent*) override;
+
+			void checkWindow();
 
 			CaptureMode mode_ = CaptureMode::Monitor;
 
@@ -63,15 +81,28 @@ namespace omni
 
 			CaptureRect current_;
 
+			QString		windowName_;
+			HWND		windowFound_;
+			QSize		regionSize_;
+			QSize		regionPos_;
+
+			QSize lastSize_ = { 0, 0 };
+
 			bool flipFrame_ = true;
 
 			int timerId_ = 0;
+			GLuint textureId_ = 0;
+			bool _firstRun = true;
+
+			// UV capture area
+			float sourceX_ = 0.0f;
+			float sourceY_ = 0.0f;
+			float sourceWidth_ = 1.0f;
+			float sourceHeight_ = 1.0f;
 
 			ScreenCaptureBackend capture_;
-			static QImage frameImage_;
 
-			static ContextBoundPtr<QOpenGLTexture> frameTexture_;
-			static ContextBoundPtr<QOpenGLShaderProgram> simpleShader_;
+			static ContextBoundPtr<QOpenGLShaderProgram> shader_;
 		};
 	}
 }

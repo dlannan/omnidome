@@ -20,6 +20,10 @@
 #include "ScreenCaptureWidget.h"
 
 #include <QComboBox>
+#include <QLineEdit>
+#include <QFormLayout>
+#include <QPushButton>
+
 
 namespace omni {
     namespace ui {
@@ -36,14 +40,7 @@ namespace omni {
             }
 
             void ScreenCapture::setMode(int _mode) {
-                input_->setMode(
-                  util::intToEnum<omni::input::ScreenCapture::CaptureMode>(_mode));
-                preview_->update();
-                emit inputChanged();
-            }
-
-            void ScreenCapture::setFlipFrame(bool _flipFrame) {
-                input_->setFlipFrame(_flipFrame);
+                input_->setMode(util::intToEnum<omni::input::ScreenCapture::CaptureMode>(_mode));
                 preview_->update();
                 emit inputChanged();
             }
@@ -53,7 +50,7 @@ namespace omni {
             }
 
             void ScreenCapture::setup() {
-                QLayout *_layout = new QVBoxLayout;
+                QVBoxLayout* _layout = new QVBoxLayout;
                 _layout->setSpacing(2);
                 _layout->setContentsMargins(0, 0, 0, 0);
                 _layout->setSizeConstraint(QLayout::SetMaximumSize);
@@ -66,11 +63,106 @@ namespace omni {
                 _boxMode->addItem("Monitor");
                 _boxMode->addItem("Window");
                 _boxMode->addItem("Region");
-                connect(_boxMode,SIGNAL(currentIndexChanged(int)),this,SLOT(setMode(int)));
+
+                preview_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+                _boxMode->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+                connect(_boxMode, SIGNAL(currentIndexChanged(int)),
+                    this, SLOT(setMode(int)));
+
                 _layout->addWidget(_boxMode);
 
-                auto* _chkFlipText = addCheckBox("Flip text",input_->flipFrame());
-                connect(_chkFlipText,SIGNAL(clicked(bool)),this,SLOT(setFlipFrame(bool)));
+                auto* _windowName = new QLineEdit();
+                _windowName->setText(input_->getWindowName());
+
+                auto* _rowWidget = new QWidget();
+                auto* _windowRow = new QHBoxLayout(_rowWidget);
+                _windowRow->setSpacing(2);
+                _windowRow->setContentsMargins(0, 0, 0, 0);
+
+                auto* _windowLabel = new QLabel("Window:");
+                _windowRow->addWidget(_windowLabel);
+                _windowRow->addWidget(_windowName);
+
+                _layout->addWidget(_rowWidget);
+
+                auto* _regionRow = new QWidget();
+                auto* _regionLayout = new QHBoxLayout(_regionRow);
+                _regionLayout->setSpacing(2);
+                _regionLayout->setContentsMargins(0, 0, 0, 0);
+
+                _regionLayout->addWidget(new QLabel("Region:"));
+
+                auto addSpinBox = [&](const char* label, int value) {
+                    _regionLayout->addWidget(new QLabel(label));
+
+                    auto* _spin = new QSpinBox();
+                    _spin->setRange(0, 99999);
+                    _spin->setValue(value);
+                    _spin->setMaximumWidth(60);
+
+                    _regionLayout->addWidget(_spin);
+                    return _spin;
+                    };
+
+                auto* _regionX = addSpinBox("X:", input_->getRegionPos().width());
+                auto* _regionY = addSpinBox("Y:", input_->getRegionPos().height());
+                auto* _regionW = addSpinBox("W:", input_->getRegionSize().width());
+                auto* _regionH = addSpinBox("H:", input_->getRegionSize().height());
+
+                _layout->addWidget(_regionRow);
+
+                auto* _setRegion = new QPushButton("Set");
+                _setRegion->setSizePolicy(
+                    QSizePolicy::Fixed,
+                    QSizePolicy::Fixed);
+
+                _regionLayout->addWidget(_setRegion);
+
+                _rowWidget->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);
+                _regionRow->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);
+
+                connect(_setRegion, &QPushButton::clicked,
+                    this, [this, _regionX, _regionY, _regionW, _regionH]() {
+                        input_->setRegionPos(QSize(_regionX->value(), _regionY->value()));
+                        input_->setRegionSize(QSize(_regionW->value(),_regionH->value()));
+                        input_->regionChanged();
+                        preview_->update();
+                        emit inputChanged();
+                    });
+
+                auto updateVisibility = [=](int mode) {
+                    bool windowMode = (mode == 1);
+                    bool regionMode = (mode == 2);
+
+                    _rowWidget->setVisible(windowMode);
+                    _regionRow->setVisible(regionMode);
+                    };
+
+                connect(_windowName, &QLineEdit::editingFinished,
+                    this, [this, _windowName]() {
+                        input_->setWindowName(_windowName->text());
+                        input_->findWindow();
+                        preview_->update();
+                        emit inputChanged();
+                    });
+
+
+                connect(_boxMode,
+                    QOverload<int>::of(&QComboBox::currentIndexChanged),
+                    this,
+                    updateVisibility);
+
+                updateVisibility(_boxMode->currentIndex());
+
+
+                connect(_windowName, &QLineEdit::editingFinished,
+                    this, [this, _windowName]() {
+                        input_->setWindowName(_windowName->text());
+                        preview_->update();
+                        emit inputChanged();
+                    });
+
                 connect(preview_.get(),SIGNAL(inputChanged()),this,SIGNAL(inputChanged()));
             }
         }

@@ -34,7 +34,6 @@ namespace omni {
               ~ScreenCapture();
 
           public slots:
-              void setFlipFrame(bool);
               void setMode(int);
               void triggerUpdate();
 

@@ -6,22 +6,35 @@
 #include <omni/visual/Rectangle.h>
 
 #include "ScreenCaptureWidget.h"
+#include <GL/glcorearb.h>
+
+#include <QGuiApplication>
+#include <QScreen>
+
 
 namespace omni
 {
 	namespace input
 	{
-		QImage ScreenCapture::frameImage_;
-		ContextBoundPtr<QOpenGLTexture> ScreenCapture::frameTexture_;
-		ContextBoundPtr<QOpenGLShaderProgram> ScreenCapture::simpleShader_;
+		ContextBoundPtr<QOpenGLShaderProgram> ScreenCapture::shader_;
 
 		ScreenCapture::ScreenCapture()
+		{
+			mode_ = CaptureMode::Monitor;
+			sourceX_ = 0.0f;
+			sourceY_ = 0.0f;
+			sourceWidth_ = 1.0f;
+			sourceHeight_ = 1.0f;
+			windowFound_ = nullptr;
+		}
+
+		ScreenCapture::~ScreenCapture()
 		{
 		}
 
 		GLuint ScreenCapture::textureId() const
 		{
-			return !frameTexture_ ? 0 : frameTexture_->textureId();
+			return  textureId_;
 		}
 
 		void ScreenCapture::activate()
@@ -40,9 +53,6 @@ namespace omni
 				killTimer(timerId_);
 				timerId_ = 0;
 			}
-
-			frameTexture_.reset();
-			simpleShader_.reset();
 		}
 
 		void ScreenCapture::timerEvent(QTimerEvent*)
@@ -53,61 +63,72 @@ namespace omni
 
 		void ScreenCapture::update()
 		{
-			if (!capture_.capture(frameImage_))
-				return;
-
-			bool _allocate = !frameTexture_ || !simpleShader_;
-			if (frameImage_.size() != size()) {
-				display_.w = frameImage_.size().width();
-				display_.h = frameImage_.size().height();
+			if (!QOpenGLContext::currentContext()) return;
+			if (!capture_.IsInitialized()) {
+				capture_.Init();
 			}
 
-			if (_allocate) {
+			using namespace visual;
+
+			if (capture_.size() != size() || !shader_)
+			{
 				primaryContextSwitch([&](QOpenGLFunctions& _)
-				{
-					setupFramebuffer(size());
-					frameTexture_.reset(new QOpenGLTexture(frameImage_.rgbSwapped().mirrored()));
-					initShader(simpleShader_, "ScreenCaptureImage");
-				});
+					{
+						setupFramebuffer(capture_.size());
+						initShader(shader_, "SimpleShader");
+					});
+				display_.w = capture_.size().width();
+				display_.h = capture_.size().height();
 			}
 
-			visual::draw_on_framebuffer(framebuffer(),
-				[&](QOpenGLFunctions& _) // Projection Operation
-			{
-				QMatrix4x4 _m;
-				_m.ortho(-0.5, 0.5, -0.5, 0.5, -1.0, 1.0);
-				glMultMatrixf(_m.constData());
-			},
-				[&](QOpenGLFunctions& _) // Model View Operation
-			{
-				visual::useShader(*simpleShader_, [&](visual::UniformHandler& _h)
-				{
-					_h.uniform("texture_size", QVector2D(size().width(), size().height()));
-					_h.texUniform("texture", textureId());
-					visual::Rectangle::draw();
-				});
-			});
+			if (!capture_.isCapturing()) return;
+			if (!framebuffer() || !framebuffer()->isValid()) return;
+
+			if (mode_ == CaptureMode::Window && windowFound_)
+				checkWindow();
+
+			textureId_ = framebuffer()->texture();
+
+			draw_on_framebuffer(framebuffer(), [&](QOpenGLFunctions&) {
+				QMatrix4x4 m;
+				m.ortho(-0.5, 0.5, -0.5, 0.5, -1.0, 1.0);
+				glMultMatrixf(m.constData());
+
+				}, [&](QOpenGLFunctions& _) {
+					capture_.CaptureTexture();
+
+					useShader(*shader_, [&](UniformHandler& h) {
+						h.texUniform("texture", capture_.textureId());
+
+						h.uniform("sourceRect",
+							QVector4D(sourceX_, sourceY_,
+								sourceWidth_, sourceHeight_));
+
+						Rectangle::draw();
+						});
+					});
+
 
 			triggerUpdateCallbacks();
 		}
 
 		QSize ScreenCapture::size() const
 		{
-			switch (mode_)
-			{
-			case CaptureMode::Monitor:
-				return display_.w > 0 && display_.h > 0
-					? QSize(display_.w, display_.h)
-					: QSize(0, 0);
+			return display_.w > 0 && display_.h > 0
+				? QSize(display_.w, display_.h)
+				: QSize(0, 0);
+		}
 
-			case CaptureMode::Window:
-				return QSize(win_.w, win_.h);
+		/// Serialize image path to stream
+		void ScreenCapture::toPropertyMap(PropertyMap& _map) const
+		{
+			Framebuffer::toPropertyMap(_map);
+		}
 
-			case CaptureMode::Region:
-				return QSize(region_.w, region_.h);
-			}
-
-			return QSize(0, 0);
+		/// Deserialize from stream and load image
+		void ScreenCapture::fromPropertyMap(PropertyMap const& _map)
+		{
+			Framebuffer::fromPropertyMap(_map);
 		}
 
 		QWidget* ScreenCapture::widget()
@@ -118,6 +139,19 @@ namespace omni
 		void ScreenCapture::setMode(CaptureMode _mode)
 		{
 			mode_ = _mode;
+			switch (mode_) {
+				case CaptureMode::Monitor:
+					sourceX_ = 0.0f;
+					sourceY_ = 0.0f;
+					sourceWidth_ = 1.0f;
+					sourceHeight_ = 1.0f;
+					windowFound_ = nullptr;
+					break;
+				case CaptureMode::Window:
+					break;
+				case CaptureMode::Region:
+					break;
+			}
 			update();
 		}
 
@@ -126,14 +160,69 @@ namespace omni
 			return mode_;
 		}
 
-		void ScreenCapture::setFlipFrame(bool _flipFrame)
-		{
-			flipFrame_ = _flipFrame;
+		void ScreenCapture::setWindowName(QString name) {
+			windowName_ = name;
+		}
+		QString ScreenCapture::getWindowName() const {
+			return windowName_;
 		}
 
-		bool ScreenCapture::flipFrame() const
+		void ScreenCapture::setRegionSize(QSize sz)
 		{
-			return flipFrame_;
+			regionSize_ = sz;
+		}
+		QSize ScreenCapture::getRegionSize() {
+			return regionSize_;
+		}
+
+		void ScreenCapture::setRegionPos(QSize pos)
+		{
+			regionPos_ = pos;
+		}
+
+		QSize ScreenCapture::getRegionPos()
+		{
+			return regionPos_;
+		}
+
+		void ScreenCapture::checkWindow()
+		{
+			RECT rect{};
+			GetClientRect(windowFound_, &rect);
+			POINT topLeft{ rect.left, rect.top };
+			ClientToScreen(windowFound_, &topLeft);
+
+			// Calc UVs based on desktop!
+			sourceX_ = topLeft.x / float(capture_.size().width());
+			sourceY_ = topLeft.y / float(capture_.size().height());
+			sourceWidth_ = (rect.right - rect.left) / float(capture_.size().width());
+			sourceHeight_ = (rect.bottom - rect.top) / float(capture_.size().height());
+		}
+
+		// Gets the window wnd.. 
+		void ScreenCapture::findWindow()
+		{
+			QByteArray nameUtf8 = windowName_.toUtf8();
+
+			HWND hwnd = FindWindowA(nullptr, nameUtf8.constData());
+			if (hwnd) {
+				windowFound_ = hwnd;
+				return;
+			}
+
+			sourceX_ = 0.0f;
+			sourceY_ = 0.0f;
+			sourceWidth_ = 1.0f;
+			sourceHeight_ = 1.0f;
+		}
+
+		void ScreenCapture::regionChanged()
+		{
+			// Calc UVs based on desktop!
+			sourceX_ = regionPos_.width() / float(capture_.size().width());
+			sourceY_ = regionPos_.height() / float(capture_.size().height());
+			sourceWidth_ = regionSize_.width() / float(capture_.size().width());
+			sourceHeight_ = regionSize_.height() / float(capture_.size().height());
 		}
 	}
 }
