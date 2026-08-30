@@ -65,7 +65,7 @@ namespace omni
 		{
 			if (!QOpenGLContext::currentContext()) return;
 			if (!capture_.IsInitialized()) {
-				capture_.Init();
+				capture_.Init(monitorSelect_);
 			}
 
 			using namespace visual;
@@ -183,6 +183,24 @@ namespace omni
 		QSize ScreenCapture::getRegionPos()
 		{
 			return regionPos_;
+		}
+
+		void ScreenCapture::setMonitor(int id)
+		{
+			int maxmonitors = capture_.getMonitorCount();
+			if (maxmonitors == 0) return;
+
+			id = std::max(0, std::min(id, maxmonitors - 1));
+			if (id != monitorSelect_) {
+				monitorSelect_ = id;
+				capture_.SetInitialized(false);
+			}
+			update();
+		}
+
+		int ScreenCapture::getMonitor()
+		{
+			return monitorSelect_;
 		}
 
 		void ScreenCapture::checkWindow()

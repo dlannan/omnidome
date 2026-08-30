@@ -57,6 +57,9 @@ namespace omni
 			void setRegionPos(QSize pos);
 			QSize getRegionPos();
 
+			void setMonitor(int id);
+			int getMonitor();
+
 			void findWindow();
 			void regionChanged();
 
@@ -80,6 +83,7 @@ namespace omni
 			CaptureRect region_ = { 0, 0, 0, 0 };
 
 			CaptureRect current_;
+			int			monitorSelect_ = 0;
 
 			QString		windowName_;
 			HWND		windowFound_;

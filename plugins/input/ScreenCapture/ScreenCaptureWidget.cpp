@@ -59,6 +59,23 @@ namespace omni {
                 preview_.reset(new TestInputPreview(input_));
                 _layout->addWidget(preview_.get());
 
+                auto* _monitorRow = new QWidget();
+                auto* _monitorLayout = new QHBoxLayout(_monitorRow);
+                auto addMonitorSpinBox = [&](const char* label, int value) {
+                    _monitorLayout->addWidget(new QLabel(label));
+
+                    auto* _spin = new QSpinBox();
+                    _spin->setRange(0, 10);
+                    _spin->setValue(value);
+                    _spin->setMaximumWidth(60);
+
+                    _monitorLayout->addWidget(_spin);
+                    return _spin;
+                    };
+                auto* _monitorSelect = addMonitorSpinBox("Monitor Selct:", input_->getMonitor());
+
+                _layout->addWidget(_monitorRow);
+
                 auto* _boxMode = new QComboBox();
                 _boxMode->addItem("Monitor");
                 _boxMode->addItem("Window");
@@ -66,6 +83,7 @@ namespace omni {
 
                 preview_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
                 _boxMode->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+                _monitorRow->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
                 connect(_boxMode, SIGNAL(currentIndexChanged(int)),
                     this, SLOT(setMode(int)));
@@ -121,6 +139,13 @@ namespace omni {
 
                 _rowWidget->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);
                 _regionRow->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);
+
+                connect(_monitorSelect, QOverload<int>::of(&QSpinBox::valueChanged),
+                    this, [this](int value) {
+                        input_->setMonitor(value);
+                        preview_->update();
+                        emit inputChanged();
+                    });
 
                 connect(_setRegion, &QPushButton::clicked,
                     this, [this, _regionX, _regionY, _regionW, _regionH]() {

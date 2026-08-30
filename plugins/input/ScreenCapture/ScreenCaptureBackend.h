@@ -30,8 +30,11 @@ namespace omni {
 			ScreenCaptureBackend();
 			~ScreenCaptureBackend();
 
+			int getMonitorCount() const;
+
 			bool IsInitialized() { return captureInitialized_; }
-			bool Init();
+			void SetInitialized(bool init) { captureInitialized_ = init; }
+			bool Init(int monitorid);
 			bool Capture(QImage& image);
 
 			void CaptureTexture();
@@ -42,14 +45,18 @@ namespace omni {
 
 		private:
 
+			void CreateDevice();
+			void DestroyCapture();
 			bool LoadDXInterop();
-			void CreateDesktopCapture();
+			void CreateDesktopCapture(int id);
 			void CaptureDesktopFrame();
 
 			PFNWGLDXOPENDEVICENVPROC wglDXOpenDeviceNV = nullptr;
 			PFNWGLDXREGISTEROBJECTNVPROC wglDXRegisterObjectNV = nullptr;
 			PFNWGLDXLOCKOBJECTSNVPROC wglDXLockObjectsNV = nullptr;
 			PFNWGLDXUNLOCKOBJECTSNVPROC wglDXUnlockObjectsNV = nullptr;
+			PFNWGLDXUNREGISTEROBJECTNVPROC wglDXUnregisterObjectNV = nullptr;
+			PFNWGLDXCLOSEDEVICENVPROC wglDXCloseDeviceNV = nullptr;
 
 			static Microsoft::WRL::ComPtr<ID3D11Device> d3d11Device_;
 			static Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11Context_;
@@ -57,10 +64,16 @@ namespace omni {
 			static Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11Texture_;
 
 
+			ComPtr<IDXGIDevice> dxgiDevice;
+			ComPtr<IDXGIAdapter> adapter_;
+
 			static HANDLE dxDevice_;
 			static HANDLE dxTexture_;
+			
+			int monitorTarget_ = 0;
 
 			bool bCapturing = false;
+			bool bDeviceInit = false;
 			bool captureInitialized_ = false;
 			GLuint openglTexture;
 

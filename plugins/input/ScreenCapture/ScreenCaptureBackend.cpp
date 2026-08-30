@@ -49,13 +49,39 @@ namespace omni {
 				reinterpret_cast<PFNWGLDXUNLOCKOBJECTSNVPROC>(
 					wglGetProcAddress("wglDXUnlockObjectsNV"));
 
+			
+			wglDXUnregisterObjectNV =
+				reinterpret_cast<PFNWGLDXUNREGISTEROBJECTNVPROC>(
+					wglGetProcAddress("wglDXUnregisterObjectNV"));
+
+			wglDXCloseDeviceNV =
+				reinterpret_cast<PFNWGLDXCLOSEDEVICENVPROC>(
+					wglGetProcAddress("wglDXCloseDeviceNV"));
+
 			return wglDXOpenDeviceNV &&
 				wglDXRegisterObjectNV &&
 				wglDXLockObjectsNV &&
 				wglDXUnlockObjectsNV;
 		}
 
-		void ScreenCaptureBackend::CreateDesktopCapture()
+		int ScreenCaptureBackend::getMonitorCount() const
+		{
+			if (!adapter_)
+				return 0;
+
+			int count = 0;
+			ComPtr<IDXGIOutput> output;
+
+			while (adapter_->EnumOutputs(count, &output) != DXGI_ERROR_NOT_FOUND)
+			{
+				output.Reset();
+				++count;
+			}
+
+			return count;
+		}
+
+		void ScreenCaptureBackend::CreateDevice()
 		{
 			HRESULT hr;
 
@@ -76,23 +102,31 @@ namespace omni {
 
 			AssertHR(hr);
 
-			ComPtr<IDXGIDevice> dxgiDevice;
 			hr = device.As(&dxgiDevice);
 			AssertHR(hr);
+			d3d11Device_ = device;
+			d3d11Context_ = context;
 
-			ComPtr<IDXGIAdapter> adapter;
-			hr = dxgiDevice->GetAdapter(&adapter);
+			bDeviceInit = true;
+		}
+
+		void ScreenCaptureBackend::CreateDesktopCapture(int id)
+		{
+			monitorTarget_ = id;
+
+			HRESULT hr;
+			hr = dxgiDevice->GetAdapter(&adapter_);
 			AssertHR(hr);
 
 			ComPtr<IDXGIOutput> output;
-			hr = adapter->EnumOutputs(0, &output);
+			hr = adapter_->EnumOutputs(monitorTarget_, &output);
 			AssertHR(hr);
 
 			ComPtr<IDXGIOutput1> output1;
 			hr = output.As(&output1);
 			AssertHR(hr);
 
-			hr = output1->DuplicateOutput(device.Get(), &dxgiDuplication_);
+			hr = output1->DuplicateOutput(d3d11Device_.Get(), &dxgiDuplication_);
 
 			AssertHR(hr);
 
@@ -114,26 +148,17 @@ namespace omni {
 
 			ComPtr<ID3D11Texture2D> texture;
 
-			hr = device->CreateTexture2D(
-				&texDesc,
-				nullptr,
-				&texture);
+			hr = d3d11Device_->CreateTexture2D(	&texDesc, nullptr, &texture);
 
 			AssertHR(hr);
 
 			LoadDXInterop();
-			dxDevice_ = wglDXOpenDeviceNV(device.Get());
+			dxDevice_ = wglDXOpenDeviceNV(d3d11Device_.Get());
 			Assert(dxDevice_);
 
 			glGenTextures(1, &openglTexture);
 
-			dxTexture_ = wglDXRegisterObjectNV(
-				dxDevice_,
-				texture.Get(),
-				openglTexture,
-				GL_TEXTURE_2D,
-				WGL_ACCESS_READ_ONLY_NV);
-
+			dxTexture_ = wglDXRegisterObjectNV( dxDevice_, texture.Get(), openglTexture, GL_TEXTURE_2D,	WGL_ACCESS_READ_ONLY_NV);
 			Assert(dxTexture_);
 
 			BOOL ok = wglDXLockObjectsNV(
@@ -144,13 +169,9 @@ namespace omni {
 			Assert(ok);
 
 			// Keep these alive if they are needed later.
-			d3d11Device_ = device;
-			d3d11Context_ = context;
 			d3d11Texture_ = texture;
-
 			bCapturing = true;
 		}
-
 
 		void ScreenCaptureBackend::CaptureDesktopFrame()
 		{
@@ -206,16 +227,63 @@ namespace omni {
 		{
 		}
 
-		bool ScreenCaptureBackend::Init()
+		void ScreenCaptureBackend::DestroyCapture()
+		{
+			if (dxTexture_) {
+				// You currently leave the object locked after creation/capture.
+				BOOL ok = wglDXUnlockObjectsNV(
+					dxDevice_,
+					1,
+					&dxTexture_);
+
+				Assert(ok);
+
+				ok = wglDXUnregisterObjectNV(
+					dxDevice_,
+					dxTexture_);
+
+				Assert(ok);
+
+				dxTexture_ = nullptr;
+			}
+
+			if (openglTexture) {
+				glDeleteTextures(1, &openglTexture);
+				openglTexture = 0;
+			}
+
+			if (dxDevice_) {
+				BOOL ok = wglDXCloseDeviceNV(dxDevice_);
+				Assert(ok);
+
+				dxDevice_ = nullptr;
+			}
+
+			// These are ComPtrs, so releasing them is easy.
+			d3d11Texture_.Reset();
+			dxgiDuplication_.Reset();
+
+			captureWidth = 0;
+			captureHeight = 0;
+			bCapturing = false;
+		}
+
+		bool ScreenCaptureBackend::Init(int monitorid = 0)
 		{
 			auto* context = QOpenGLContext::currentContext();
-
 			if (!context)
 			{
 				// No current GL context on this thread.
 				return false;
 			}
-			CreateDesktopCapture();
+			if (!bDeviceInit)
+				CreateDevice();
+				
+			// If monitor changes then detroy and create again
+			if (monitorid != monitorTarget_)
+				DestroyCapture();
+
+			CreateDesktopCapture(monitorid);
 			captureInitialized_ = true;
 			return true;
 		}
