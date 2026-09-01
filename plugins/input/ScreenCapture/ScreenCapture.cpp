@@ -17,15 +17,10 @@ namespace omni
 	namespace input
 	{
 		ContextBoundPtr<QOpenGLShaderProgram> ScreenCapture::shader_;
+		int ScreenCapture::lastValidMonitor_ = 0;
 
 		ScreenCapture::ScreenCapture()
 		{
-			mode_ = CaptureMode::Monitor;
-			sourceX_ = 0.0f;
-			sourceY_ = 0.0f;
-			sourceWidth_ = 1.0f;
-			sourceHeight_ = 1.0f;
-			windowFound_ = nullptr;
 		}
 
 		ScreenCapture::~ScreenCapture()
@@ -55,6 +50,23 @@ namespace omni
 			}
 		}
 
+		// Check monitors!!
+		bool ScreenCapture::canAdd()
+		{
+			if (capture_.IsDeviceInit()) {
+				int maxmonitors = capture_.getMonitorCount();
+				if (maxmonitors == 0) return false;
+				if (lastValidMonitor_ + 1 > maxmonitors) return false;
+			}
+
+			monitorSelect_ = lastValidMonitor_;
+			if(!capture_.IsInitialized()) capture_.Init(monitorSelect_);
+			lastValidMonitor_++;				
+			if(monitorSelect_ < capture_.getMonitorCount() )
+				return true;
+			return false;
+		}
+
 		void ScreenCapture::timerEvent(QTimerEvent*)
 		{
 			update();
@@ -64,9 +76,6 @@ namespace omni
 		void ScreenCapture::update()
 		{
 			if (!QOpenGLContext::currentContext()) return;
-			if (!capture_.IsInitialized()) {
-				capture_.Init(monitorSelect_);
-			}
 
 			using namespace visual;
 
@@ -81,7 +90,6 @@ namespace omni
 				display_.h = capture_.size().height();
 			}
 
-			if (!capture_.isCapturing()) return;
 			if (!framebuffer() || !framebuffer()->isValid()) return;
 
 			if (mode_ == CaptureMode::Window && windowFound_)
@@ -122,13 +130,24 @@ namespace omni
 		/// Serialize image path to stream
 		void ScreenCapture::toPropertyMap(PropertyMap& _map) const
 		{
+			_map.put("captureMode", static_cast<int>(mode_));
+			_map.put("windowName",windowName_);
+			_map.put("regionSize", regionSize_);
+			_map.put("regionPos", regionPos_);
 			Framebuffer::toPropertyMap(_map);
 		}
 
 		/// Deserialize from stream and load image
 		void ScreenCapture::fromPropertyMap(PropertyMap const& _map)
 		{
-			Framebuffer::fromPropertyMap(_map);
+			int mode;
+			_map.get("captureMode", mode);
+			mode_ = static_cast<CaptureMode>(mode);
+			_map.get("windowName", windowName_);
+			_map.get("regionSize", regionSize_);
+			_map.get("regionPos", regionPos_);
+			canAdd();
+			setMode(mode_);
 		}
 
 		QWidget* ScreenCapture::widget()
@@ -138,7 +157,7 @@ namespace omni
 
 		void ScreenCapture::setMode(CaptureMode _mode)
 		{
-			mode_ = _mode;
+			mode_ = (CaptureMode)((int)_mode % 3);
 			switch (mode_) {
 				case CaptureMode::Monitor:
 					sourceX_ = 0.0f;
@@ -148,11 +167,15 @@ namespace omni
 					windowFound_ = nullptr;
 					break;
 				case CaptureMode::Window:
+					findWindow();
 					break;
 				case CaptureMode::Region:
+					checkWindow();
+					regionChanged();
 					break;
 			}
 			update();
+			emit modeChanged(static_cast<int>(mode_));
 		}
 
 		ScreenCapture::CaptureMode ScreenCapture::mode() const

@@ -19,13 +19,13 @@ namespace omni {
 
 		Microsoft::WRL::ComPtr<ID3D11Device> ScreenCaptureBackend::d3d11Device_;
 		Microsoft::WRL::ComPtr<ID3D11DeviceContext> ScreenCaptureBackend::d3d11Context_;
-		Microsoft::WRL::ComPtr<IDXGIOutputDuplication> ScreenCaptureBackend::dxgiDuplication_;
-		Microsoft::WRL::ComPtr<ID3D11Texture2D> ScreenCaptureBackend::d3d11Texture_;
 
+		ComPtr<IDXGIDevice> ScreenCaptureBackend::dxgiDevice;
+		HANDLE ScreenCaptureBackend::dxDevice_ = nullptr;;
+		ComPtr<IDXGIAdapter> ScreenCaptureBackend::adapter_ = nullptr;
+		bool ScreenCaptureBackend::bDeviceInit = false;
 
-		HANDLE ScreenCaptureBackend::dxDevice_ = nullptr;
-		HANDLE ScreenCaptureBackend::dxTexture_ = nullptr;
-
+		std::vector<MonitorCapture> ScreenCaptureBackend::monitors_;
 
 		bool ScreenCaptureBackend::LoadDXInterop()
 		{
@@ -64,6 +64,13 @@ namespace omni {
 				wglDXUnlockObjectsNV;
 		}
 
+		QSize ScreenCaptureBackend::size()
+		{
+			if (monitors_.size() == 0) return QSize(1, 1);
+			auto mon = monitors_[monitorTarget_];
+			return QSize(mon.width, mon.height);
+		}
+
 		int ScreenCaptureBackend::getMonitorCount() const
 		{
 			if (!adapter_)
@@ -71,18 +78,19 @@ namespace omni {
 
 			int count = 0;
 			ComPtr<IDXGIOutput> output;
-
 			while (adapter_->EnumOutputs(count, &output) != DXGI_ERROR_NOT_FOUND)
 			{
 				output.Reset();
 				++count;
 			}
-
 			return count;
 		}
 
 		void ScreenCaptureBackend::CreateDevice()
 		{
+			// Dont create more than one device!!
+			if (dxDevice_ != nullptr) return;
+
 			HRESULT hr;
 
 			ComPtr<ID3D11Device> device;
@@ -104,6 +112,10 @@ namespace omni {
 
 			hr = device.As(&dxgiDevice);
 			AssertHR(hr);
+
+			hr = dxgiDevice->GetAdapter(&adapter_);
+			AssertHR(hr);
+
 			d3d11Device_ = device;
 			d3d11Context_ = context;
 
@@ -112,97 +124,94 @@ namespace omni {
 
 		void ScreenCaptureBackend::CreateDesktopCapture(int id)
 		{
-			monitorTarget_ = id;
+			MonitorCapture capture;
 
 			HRESULT hr;
-			hr = dxgiDevice->GetAdapter(&adapter_);
-			AssertHR(hr);
 
 			ComPtr<IDXGIOutput> output;
-			hr = adapter_->EnumOutputs(monitorTarget_, &output);
+			hr = adapter_->EnumOutputs(id, &output);
 			AssertHR(hr);
 
 			ComPtr<IDXGIOutput1> output1;
 			hr = output.As(&output1);
 			AssertHR(hr);
 
-			hr = output1->DuplicateOutput(d3d11Device_.Get(), &dxgiDuplication_);
-
+			hr = output1->DuplicateOutput( d3d11Device_.Get(), &capture.duplication);
 			AssertHR(hr);
 
 			DXGI_OUTDUPL_DESC desc{};
-			dxgiDuplication_->GetDesc(&desc);
+			capture.duplication->GetDesc(&desc);
 
-			captureWidth = desc.ModeDesc.Width;
-			captureHeight = desc.ModeDesc.Height;
-			printf("Desktop Width: %d   Height: %d\n", captureWidth, captureHeight);
+			capture.width = desc.ModeDesc.Width;
+			capture.height = desc.ModeDesc.Height;
 
 			D3D11_TEXTURE2D_DESC texDesc{};
-			texDesc.Width = captureWidth;
-			texDesc.Height = captureHeight;
+			texDesc.Width = capture.width;
+			texDesc.Height = capture.height;
 			texDesc.MipLevels = 1;
 			texDesc.ArraySize = 1;
 			texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
 			texDesc.SampleDesc.Count = 1;
 			texDesc.Usage = D3D11_USAGE_DEFAULT;
 
-			ComPtr<ID3D11Texture2D> texture;
-
-			hr = d3d11Device_->CreateTexture2D(	&texDesc, nullptr, &texture);
-
+			hr = d3d11Device_->CreateTexture2D(	&texDesc, nullptr, &capture.texture);
 			AssertHR(hr);
 
+			// dxDevice_ can be shared by all monitor textures.
 			LoadDXInterop();
-			dxDevice_ = wglDXOpenDeviceNV(d3d11Device_.Get());
-			Assert(dxDevice_);
+			if (!dxDevice_)
+			{
+				dxDevice_ = wglDXOpenDeviceNV(d3d11Device_.Get());
+				Assert(dxDevice_);
+			}
 
-			glGenTextures(1, &openglTexture);
+			glGenTextures(1, &capture.glTexture);
 
-			dxTexture_ = wglDXRegisterObjectNV( dxDevice_, texture.Get(), openglTexture, GL_TEXTURE_2D,	WGL_ACCESS_READ_ONLY_NV);
-			Assert(dxTexture_);
-
-			BOOL ok = wglDXLockObjectsNV(
+			capture.dxTexture = wglDXRegisterObjectNV(
 				dxDevice_,
-				1,
-				&dxTexture_);
+				capture.texture.Get(),
+				capture.glTexture,
+				GL_TEXTURE_2D,
+				WGL_ACCESS_READ_ONLY_NV);
 
+			Assert(capture.dxTexture);
+
+			BOOL ok = wglDXLockObjectsNV(dxDevice_,	1, &capture.dxTexture);
 			Assert(ok);
 
-			// Keep these alive if they are needed later.
-			d3d11Texture_ = texture;
-			bCapturing = true;
+			monitors_.push_back(std::move(capture));
+			monitorTarget_ = id;
 		}
 
 		void ScreenCaptureBackend::CaptureDesktopFrame()
 		{
-			DXGI_OUTDUPL_FRAME_INFO info{};
-			Microsoft::WRL::ComPtr<IDXGIResource> resource;
+			if (monitors_.size() == 0) return;
+			if (monitors_.size() <= monitorTarget_) return;
 
-			HRESULT hr = dxgiDuplication_->AcquireNextFrame(
-				0,
-				&info,
-				&resource);
+			auto& capture = monitors_[monitorTarget_];
+
+			DXGI_OUTDUPL_FRAME_INFO info{};
+			ComPtr<IDXGIResource> resource;
+
+			HRESULT hr = capture.duplication->AcquireNextFrame(
+				0, &info, &resource);
 
 			if (FAILED(hr))
-			{
-				// DXGI_ERROR_WAIT_TIMEOUT is normal when no new frame is available.
 				return;
-			}
 
-			Microsoft::WRL::ComPtr<ID3D11Texture2D> resourceTexture;
-
+			ComPtr<ID3D11Texture2D> resourceTexture;
 			hr = resource.As(&resourceTexture);
 			AssertHR(hr);
 
 			BOOL ok = wglDXUnlockObjectsNV(
 				dxDevice_,
 				1,
-				&dxTexture_);
+				&capture.dxTexture);
 
 			Assert(ok);
 
 			d3d11Context_->CopyResource(
-				d3d11Texture_.Get(),
+				capture.texture.Get(),
 				resourceTexture.Get());
 
 			d3d11Context_->Flush();
@@ -210,16 +219,17 @@ namespace omni {
 			ok = wglDXLockObjectsNV(
 				dxDevice_,
 				1,
-				&dxTexture_);
+				&capture.dxTexture);
 
 			Assert(ok);
 
-			dxgiDuplication_->ReleaseFrame();
+			capture.duplication->ReleaseFrame();
 		}
+
+
 
 		ScreenCaptureBackend::ScreenCaptureBackend()
 		{
-			bCapturing = false;
 			captureInitialized_ = false;
 		}
 
@@ -227,46 +237,62 @@ namespace omni {
 		{
 		}
 
-		void ScreenCaptureBackend::DestroyCapture()
+		void ScreenCaptureBackend::DestroyCapture(int monitor)
 		{
-			if (dxTexture_) {
-				// You currently leave the object locked after creation/capture.
-				BOOL ok = wglDXUnlockObjectsNV(
-					dxDevice_,
-					1,
-					&dxTexture_);
+			// All GL/WGL interop operations need the appropriate
+			// OpenGL context current here.
 
-				Assert(ok);
+			auto& capture = monitors_[monitor];
+			{
+				// If the WGL object is currently locked, unlock it first.
+				if (capture.dxTexture)
+				{
+					BOOL ok = wglDXUnlockObjectsNV(
+						dxDevice_,
+						1,
+						&capture.dxTexture);
 
-				ok = wglDXUnregisterObjectNV(
-					dxDevice_,
-					dxTexture_);
+					Assert(ok);
 
-				Assert(ok);
+					ok = wglDXUnregisterObjectNV(
+						dxDevice_,
+						capture.dxTexture);
 
-				dxTexture_ = nullptr;
+					Assert(ok);
+
+					capture.dxTexture = nullptr;
+				}
+
+				if (capture.glTexture)
+				{
+					glDeleteTextures(1, &capture.glTexture);
+					capture.glTexture = 0;
+				}
+
+				// Release the D3D texture and duplication.
+				capture.texture.Reset();
+				capture.duplication.Reset();
+
+				capture.width = 0;
+				capture.height = 0;
 			}
 
-			if (openglTexture) {
-				glDeleteTextures(1, &openglTexture);
-				openglTexture = 0;
-			}
+			monitors_.clear();
 
-			if (dxDevice_) {
+			// The WGL DX device is shared by all monitor captures,
+			// so close it only after all objects have been unregistered.
+			if (dxDevice_)
+			{
 				BOOL ok = wglDXCloseDeviceNV(dxDevice_);
 				Assert(ok);
 
 				dxDevice_ = nullptr;
 			}
 
-			// These are ComPtrs, so releasing them is easy.
-			d3d11Texture_.Reset();
-			dxgiDuplication_.Reset();
-
 			captureWidth = 0;
 			captureHeight = 0;
-			bCapturing = false;
 		}
+
 
 		bool ScreenCaptureBackend::Init(int monitorid = 0)
 		{
@@ -280,8 +306,8 @@ namespace omni {
 				CreateDevice();
 				
 			// If monitor changes then detroy and create again
-			if (monitorid != monitorTarget_)
-				DestroyCapture();
+//			if (monitorid != monitorTarget_)
+//				DestroyCapture();
 
 			CreateDesktopCapture(monitorid);
 			captureInitialized_ = true;
@@ -290,7 +316,8 @@ namespace omni {
 
 		void ScreenCaptureBackend::CaptureTexture()
 		{
-			CaptureDesktopFrame();
+			if(captureInitialized_)
+				CaptureDesktopFrame();
 		}
 
 		bool ScreenCaptureBackend::Capture(QImage& image)

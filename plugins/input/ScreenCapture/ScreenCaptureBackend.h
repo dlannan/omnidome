@@ -24,6 +24,19 @@ using Microsoft::WRL::ComPtr;
 namespace omni {
 	namespace input {
 
+		struct MonitorCapture
+		{
+			Microsoft::WRL::ComPtr<IDXGIOutputDuplication> duplication;
+			Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+
+			HANDLE dxTexture = nullptr;
+			GLuint glTexture = 0;
+
+			int width = 0;
+			int height = 0;
+		};
+
+
 		class ScreenCaptureBackend
 		{
 		public:
@@ -32,6 +45,7 @@ namespace omni {
 
 			int getMonitorCount() const;
 
+			bool IsDeviceInit() { return bDeviceInit; }
 			bool IsInitialized() { return captureInitialized_; }
 			void SetInitialized(bool init) { captureInitialized_ = init; }
 			bool Init(int monitorid);
@@ -39,14 +53,13 @@ namespace omni {
 
 			void CaptureTexture();
 
-			unsigned int textureId() { return openglTexture; }
-			bool isCapturing() { return bCapturing; }
-			QSize size() { return QSize(captureWidth, captureHeight); }
+			unsigned int textureId() { return monitors_[monitorTarget_].glTexture; }
+			QSize size();
 
 		private:
 
 			void CreateDevice();
-			void DestroyCapture();
+			void DestroyCapture(int monitor);
 			bool LoadDXInterop();
 			void CreateDesktopCapture(int id);
 			void CaptureDesktopFrame();
@@ -60,22 +73,19 @@ namespace omni {
 
 			static Microsoft::WRL::ComPtr<ID3D11Device> d3d11Device_;
 			static Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11Context_;
-			static Microsoft::WRL::ComPtr<IDXGIOutputDuplication> dxgiDuplication_;
-			static Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11Texture_;
+			
+			static ComPtr<IDXGIDevice> dxgiDevice;
+			static ComPtr<IDXGIAdapter> adapter_;
 
-
-			ComPtr<IDXGIDevice> dxgiDevice;
-			ComPtr<IDXGIAdapter> adapter_;
+			static std::vector<MonitorCapture> monitors_;
+			int currentMonitor_ = 0;
 
 			static HANDLE dxDevice_;
-			static HANDLE dxTexture_;
 			
 			int monitorTarget_ = 0;
 
-			bool bCapturing = false;
-			bool bDeviceInit = false;
+			static bool bDeviceInit;
 			bool captureInitialized_ = false;
-			GLuint openglTexture;
 
 			uint32_t captureWidth;
 			uint32_t captureHeight;
