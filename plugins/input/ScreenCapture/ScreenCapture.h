@@ -59,6 +59,7 @@ namespace omni
 			QSize getRegionPos();
 
 			int getMonitor();
+			void removeMonitor();
 
 			void findWindow();
 			void regionChanged();
@@ -78,7 +79,6 @@ namespace omni
 			void timerEvent(QTimerEvent*) override;
 
 			void checkWindow();
-			void setMonitor(int id);
 
 			CaptureRect win_ = { 0, 0, 0, 0 };
 			CaptureRect display_ = { 0, 0, 0, 0 };

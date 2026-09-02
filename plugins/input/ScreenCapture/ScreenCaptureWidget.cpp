@@ -38,7 +38,6 @@ namespace omni {
             }
 
             ScreenCapture::~ScreenCapture() {
-
             }
 
             void ScreenCapture::setMode(int _mode) {

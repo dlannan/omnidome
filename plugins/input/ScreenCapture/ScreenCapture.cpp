@@ -25,6 +25,7 @@ namespace omni
 
 		ScreenCapture::~ScreenCapture()
 		{
+			removeMonitor();
 		}
 
 		GLuint ScreenCapture::textureId() const
@@ -53,18 +54,16 @@ namespace omni
 		// Check monitors!!
 		bool ScreenCapture::canAdd()
 		{
-			if (capture_.IsDeviceInit()) {
-				int maxmonitors = capture_.getMonitorCount();
-				if (maxmonitors == 0) return false;
-				if (lastValidMonitor_ + 1 > maxmonitors) return false;
-			}
+			monitorSelect_ = capture_.GetFreeMonitorId();
+			if (monitorSelect_ == -1) return false;
+			if(!capture_.IsInitialized()) 
+				capture_.Init(monitorSelect_);		
+			return true;
+		}
 
-			monitorSelect_ = lastValidMonitor_;
-			if(!capture_.IsInitialized()) capture_.Init(monitorSelect_);
-			lastValidMonitor_++;				
-			if(monitorSelect_ < capture_.getMonitorCount() )
-				return true;
-			return false;
+		void ScreenCapture::removeMonitor()
+		{
+			capture_.RemoveMonitor(monitorSelect_);
 		}
 
 		void ScreenCapture::timerEvent(QTimerEvent*)
@@ -206,19 +205,6 @@ namespace omni
 		QSize ScreenCapture::getRegionPos()
 		{
 			return regionPos_;
-		}
-
-		void ScreenCapture::setMonitor(int id)
-		{
-			int maxmonitors = capture_.getMonitorCount();
-			if (maxmonitors == 0) return;
-
-			id = std::max(0, std::min(id, maxmonitors - 1));
-			if (id != monitorSelect_) {
-				monitorSelect_ = id;
-				capture_.SetInitialized(false);
-			}
-			update();
 		}
 
 		int ScreenCapture::getMonitor()

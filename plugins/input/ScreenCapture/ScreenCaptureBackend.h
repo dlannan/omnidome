@@ -34,6 +34,7 @@ namespace omni {
 
 			int width = 0;
 			int height = 0;
+			int	id = 0;
 		};
 
 
@@ -43,27 +44,52 @@ namespace omni {
 			ScreenCaptureBackend();
 			~ScreenCaptureBackend();
 
-			int getMonitorCount() const;
-
+			// Is the capture dxdevice been initialized? This only needs to happen once per app run.
 			bool IsDeviceInit() { return bDeviceInit; }
-			bool IsInitialized() { return captureInitialized_; }
-			void SetInitialized(bool init) { captureInitialized_ = init; }
-			bool Init(int monitorid);
-			bool Capture(QImage& image);
 
+			// Is the capture initialized (ie texture created and ready to capture)
+			bool IsInitialized() { return captureInitialized_; }
+
+			// Tell capture its initialized state (may be needed from plugin changes)
+			void SetInitialized(bool init) { captureInitialized_ = init; }
+			
+			// Get a monitor that is available - returns -1 if it failed or no monitors left
+			int GetFreeMonitorId();
+			// Remove a monitor capture upon deactivation
+			void RemoveMonitor(int monid);
+
+			// Init the capture system - create device if needed and textures
+			bool Init(int monitorid);
+			// Capture a frame to the gltexture
 			void CaptureTexture();
 
-			unsigned int textureId() { return monitors_[monitorTarget_].glTexture; }
+			// Get the gl texture for a monitor capture
+			unsigned int textureId();
+
+			// Get the size of the capture texture
 			QSize size();
 
 		private:
 
-			void CreateDevice();
-			void DestroyCapture(int monitor);
-			bool LoadDXInterop();
-			void CreateDesktopCapture(int id);
-			void CaptureDesktopFrame();
+			// Get the number of available monitors
+			int getMonitorCount() const;
 
+			// Create the dxdevice and adaptor objects
+			void CreateDevice();
+			// Shutdown the capture layers and textures
+			void DestroyCapture(int monitor);
+			// Load in the NV extensions for capturing
+			bool LoadDXInterop();
+			// Capture the currently set monitor to a gltexture
+			void CaptureDesktopFrame();
+			//  Create the capture texture and runtime objects needed
+			void CreateDesktopCapture(int id);
+
+			// Old method of using GDI screen capture - deprecated. Kept in case of need
+			bool Capture(QImage& image);
+
+
+			// Capture calls used to for texture copying
 			PFNWGLDXOPENDEVICENVPROC wglDXOpenDeviceNV = nullptr;
 			PFNWGLDXREGISTEROBJECTNVPROC wglDXRegisterObjectNV = nullptr;
 			PFNWGLDXLOCKOBJECTSNVPROC wglDXLockObjectsNV = nullptr;
@@ -71,24 +97,23 @@ namespace omni {
 			PFNWGLDXUNREGISTEROBJECTNVPROC wglDXUnregisterObjectNV = nullptr;
 			PFNWGLDXCLOSEDEVICENVPROC wglDXCloseDeviceNV = nullptr;
 
+
 			static Microsoft::WRL::ComPtr<ID3D11Device> d3d11Device_;
 			static Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11Context_;
 			
 			static ComPtr<IDXGIDevice> dxgiDevice;
 			static ComPtr<IDXGIAdapter> adapter_;
 
-			static std::vector<MonitorCapture> monitors_;
+			static std::map<int, MonitorCapture> monitors_;
 			int currentMonitor_ = 0;
 
 			static HANDLE dxDevice_;
 			
+			// The monitor id to use when capturing
 			int monitorTarget_ = 0;
 
 			static bool bDeviceInit;
 			bool captureInitialized_ = false;
-
-			uint32_t captureWidth;
-			uint32_t captureHeight;
 		};
 	}
 }

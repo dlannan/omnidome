@@ -25,7 +25,7 @@ namespace omni {
 		ComPtr<IDXGIAdapter> ScreenCaptureBackend::adapter_ = nullptr;
 		bool ScreenCaptureBackend::bDeviceInit = false;
 
-		std::vector<MonitorCapture> ScreenCaptureBackend::monitors_;
+		std::map<int, MonitorCapture> ScreenCaptureBackend::monitors_;
 
 		bool ScreenCaptureBackend::LoadDXInterop()
 		{
@@ -67,8 +67,16 @@ namespace omni {
 		QSize ScreenCaptureBackend::size()
 		{
 			if (monitors_.size() == 0) return QSize(1, 1);
+			if (monitors_.find(monitorTarget_) == monitors_.end()) return QSize(1, 1);
 			auto mon = monitors_[monitorTarget_];
 			return QSize(mon.width, mon.height);
+		}
+
+		unsigned int ScreenCaptureBackend::textureId()
+		{
+			if (monitors_.size() == 0) return 0;
+			if (monitors_.find(monitorTarget_) == monitors_.end()) return 0;
+			return monitors_[monitorTarget_].glTexture; 
 		}
 
 		int ScreenCaptureBackend::getMonitorCount() const
@@ -84,6 +92,35 @@ namespace omni {
 				++count;
 			}
 			return count;
+		}
+
+		// This internally looks at the monitor list, and gets the next available monitor
+		//  id from the vector.
+		int ScreenCaptureBackend::GetFreeMonitorId()
+		{
+			if (!bDeviceInit) CreateDevice();
+			int monitorCount = getMonitorCount();
+			if (monitorCount > 0) {
+				if (monitors_.size() == 0) return 0;
+				// Check if each monitor is assigned
+				if (monitors_.size() > 0) {
+					std::vector<int> used_monitors;
+					for (int i = 0; i < monitorCount; i++) {
+						if (monitors_.find(i) == monitors_.end())
+							return i;
+					}
+				}
+			}
+			return -1;
+		}
+
+		void ScreenCaptureBackend::RemoveMonitor(int monid)
+		{
+			auto monitor = monitors_.find(monid);
+			if(monitor != monitors_.end()) {
+				//DestroyCapture(monitor->second.id);
+				monitors_.erase(monitor);
+			}
 		}
 
 		void ScreenCaptureBackend::CreateDevice()
@@ -125,6 +162,7 @@ namespace omni {
 		void ScreenCaptureBackend::CreateDesktopCapture(int id)
 		{
 			MonitorCapture capture;
+			capture.id = id;
 
 			HRESULT hr;
 
@@ -179,14 +217,14 @@ namespace omni {
 			BOOL ok = wglDXLockObjectsNV(dxDevice_,	1, &capture.dxTexture);
 			Assert(ok);
 
-			monitors_.push_back(std::move(capture));
+			monitors_[id] = (std::move(capture));
 			monitorTarget_ = id;
 		}
 
 		void ScreenCaptureBackend::CaptureDesktopFrame()
 		{
 			if (monitors_.size() == 0) return;
-			if (monitors_.size() <= monitorTarget_) return;
+			if (monitors_.find(monitorTarget_) == monitors_.end()) return;
 
 			auto& capture = monitors_[monitorTarget_];
 
@@ -241,56 +279,40 @@ namespace omni {
 		{
 			// All GL/WGL interop operations need the appropriate
 			// OpenGL context current here.
+			if (monitors_.find(monitor) == monitors_.end()) return;
 
 			auto& capture = monitors_[monitor];
+			// If the WGL object is currently locked, unlock it first.
+			if (capture.dxTexture)
 			{
-				// If the WGL object is currently locked, unlock it first.
-				if (capture.dxTexture)
-				{
-					BOOL ok = wglDXUnlockObjectsNV(
-						dxDevice_,
-						1,
-						&capture.dxTexture);
+				BOOL ok = wglDXUnlockObjectsNV(
+					dxDevice_,
+					1,
+					&capture.dxTexture);
 
-					Assert(ok);
-
-					ok = wglDXUnregisterObjectNV(
-						dxDevice_,
-						capture.dxTexture);
-
-					Assert(ok);
-
-					capture.dxTexture = nullptr;
-				}
-
-				if (capture.glTexture)
-				{
-					glDeleteTextures(1, &capture.glTexture);
-					capture.glTexture = 0;
-				}
-
-				// Release the D3D texture and duplication.
-				capture.texture.Reset();
-				capture.duplication.Reset();
-
-				capture.width = 0;
-				capture.height = 0;
-			}
-
-			monitors_.clear();
-
-			// The WGL DX device is shared by all monitor captures,
-			// so close it only after all objects have been unregistered.
-			if (dxDevice_)
-			{
-				BOOL ok = wglDXCloseDeviceNV(dxDevice_);
 				Assert(ok);
 
-				dxDevice_ = nullptr;
+				ok = wglDXUnregisterObjectNV(
+					dxDevice_,
+					capture.dxTexture);
+
+				Assert(ok);
+
+				capture.dxTexture = nullptr;
 			}
 
-			captureWidth = 0;
-			captureHeight = 0;
+			if (capture.glTexture)
+			{
+				glDeleteTextures(1, &capture.glTexture);
+				capture.glTexture = 0;
+			}
+
+			// Release the D3D texture and duplication.
+			capture.texture.Reset();
+			capture.duplication.Reset();
+
+			capture.width = 0;
+			capture.height = 0;
 		}
 
 
